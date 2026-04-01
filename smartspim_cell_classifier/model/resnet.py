@@ -1,11 +1,10 @@
-from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from keras import (
     KerasTensor as Tensor,
 )
 from keras import Model
 import keras.ops as ops
-from keras import backend as K
 from keras.initializers import Initializer
 from keras.layers import (
     Activation,
@@ -531,7 +530,7 @@ def get_resnet_blocks_and_bottleneck(
 ):
     """
     Parses dicts, and returns how many resnet blocks are in each unit, along
-    with whether they are bottlneck blocks or not
+    with whether they are bottleneck blocks or not
 
     :param network_depth:
     :return:
