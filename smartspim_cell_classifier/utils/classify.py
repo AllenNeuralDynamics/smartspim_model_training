@@ -42,6 +42,20 @@ class Classification():
         data = da.from_zarr(path, storage_options={"anon": True})
         return data[0, 0, :, :, :]
 
+    def filter_and_localize_cells(self):
+        """Keep only cells within the region bounding box and convert to region-local coordinates."""
+        z0, y0, x0, z1, y1, x1 = self.offsets
+        filtered = []
+        for cell in self.cells:
+            if z0 <= cell.z < z1 and y0 <= cell.y < y1 and x0 <= cell.x < x1:
+                new_cell = Cell(
+                    pos={'x': cell.x - x0, 'y': cell.y - y0, 'z': cell.z - z0},
+                    cell_type=cell.type,
+                )
+                filtered.append(new_cell)
+        logger.info(f"Cells within region: {len(filtered)} / {len(self.cells)}")
+        return filtered
+
     def scale_cells(self):
         new_cells = []
         for cell in self.cells:
@@ -111,12 +125,13 @@ class Classification():
             new_cell.type = predictions[idx] + 1
             classified_cells.append(new_cell)
 
+        scale_factor = 2 ** int(self.input_scale)
         cells_out = []
         prob_records = []
         for idx, cell in enumerate(classified_cells):
-            cell.x = (cell.x + offset[0] - padding) * 2
-            cell.y = (cell.y + offset[1] - padding) * 2
-            cell.z = (cell.z + offset[2] - padding) * 2
+            cell.x = (cell.x + offset[0] - padding) * scale_factor
+            cell.y = (cell.y + offset[1] - padding) * scale_factor
+            cell.z = (cell.z + offset[2] - padding) * scale_factor
             cells_out.append(cell)
             prob_records.append([cell.z, cell.y, cell.x, raw_probs[idx]])
 
@@ -140,6 +155,7 @@ class Classification():
         signal_zarr = self.load_zarr(signal_path)
         bkg_zarr = self.load_zarr(bkg_path)
 
+        self.cells = self.filter_and_localize_cells()
         self.offsets = [int(offset / 2**int(self.input_scale)) for offset in self.offsets]
 
         signal = np.asarray(signal_zarr[
