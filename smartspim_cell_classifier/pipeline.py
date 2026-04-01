@@ -8,7 +8,7 @@ from glob import glob
 from pathlib import Path
 from imlib.IO.cells import get_cells
 
-from .utils import utils, classify_keras, quantify
+from .utils import utils, benchmark_keras, quantify
 from .train import train_keras
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 _REQUIRED_BY_STAGE = {
     "train_model":        ["save_path", "trained_model_path", "yml_path", "training_sets"],
     "build_training_set": ["save_path", ("annotation_params", "annotation_path")],
-    "classify":           ["save_path", "trained_model_path"],
+    "benchmark":          ["save_path", "trained_model_path", "benchmark_config_path"],
     "quantify":           [("benchmark_params", "classified_xml_path"),
                            ("benchmark_params", "benchmark_json_path")],
 }
@@ -139,10 +139,10 @@ class SmartSPIMPipeline:
         logger.info(f"Augmentation parameters: {p['augment_params']}")
         train_keras.run(data_params, p["augment_params"], self.model)
 
-    def classify(self):
+    def benchmark(self):
         """Run cell classification on zarr volumes."""
         p = self.params
-        fname = "../code/config_files/crop_configs.yml"
+        fname = p["benchmark_config_path"]
 
         for d in ("detections", "classifications", "scaled_cells", "crops"):
             os.makedirs(f"../results/{d}/", exist_ok=True)
@@ -150,6 +150,7 @@ class SmartSPIMPipeline:
         with open(fname, "r") as f:
             data = yaml.safe_load(f)
 
+        aug = p["augment_params"]
         class_params = {
             "model": p["trained_model_path"],
             "save_path": p["save_path"],
@@ -159,9 +160,9 @@ class SmartSPIMPipeline:
             "pad": 26,
             "test": p["Test"],
             "batch_size": 32,
-            "means": [333.3501204704477, 240.21839794541498],
-            "stds": [1375.1969370743097, 173.95160585816996],
             "rescale": None,
+            "percentile_normalization": aug.get("percentile_normalization", False),
+            "percentile_range": aug.get("percentile_range", (1, 99)),
         }
 
         for cond, cond_data in data["data"].items():
@@ -187,7 +188,7 @@ class SmartSPIMPipeline:
             class_params["cond"] = cond
 
             start = time.time()
-            classify_keras.Classification(class_params).run()
+            benchmark_keras.Classification(class_params).run()
             logger.info(f"Classification took {time.time() - start:.1f}s for condition: {cond}")
 
     def quantify(self):
@@ -207,8 +208,8 @@ class SmartSPIMPipeline:
             self.build_training_set()
         if p.get("train_model"):
             self.train_model()
-        if p.get("classify"):
-            self.classify()
+        if p.get("benchmark"):
+            self.benchmark()
         if p.get("quantify"):
             self.quantify()
 
@@ -241,11 +242,12 @@ class SmartSPIMPipeline:
             "build_model": True,
             "build_training_set": False,
             "train_model": True,
-            "classify": False,
+            "benchmark": False,
             "quantify": False,
             "Test": False,
             "save_path": "../results",
             "trained_model_path": "../data/models/model_new.keras",
+            "benchmark_config_path": None,
             "yml_path": "../data",
             "annotation_params": {
                 "level": 1,

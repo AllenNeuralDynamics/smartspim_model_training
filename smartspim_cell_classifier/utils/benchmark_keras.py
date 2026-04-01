@@ -15,8 +15,7 @@ import numpy as np
 from glob import glob
 from pathlib import Path
 import keras.backend as K
-from cellfinder.core.classify import classify
-from cellfinder.core.classify.cube_generator import CubeGeneratorFromFile
+
 from cellfinder.core.classify.tools import get_model
 from imlib.IO.cells import save_cells, get_cells
 from imlib.cells.cells import Cell
@@ -102,9 +101,9 @@ class Classification():
         self.detect_pad = params['detect_pad']
         self.pad = params['pad']
         self.test = params['test']
-        self.means = params['means']
-        self.stds = params['stds']
         self.rescale= params['rescale']
+        self.percentile_normalization = params.get('percentile_normalization', False)
+        self.percentile_range = params.get('percentile_range', (1, 99))
 
     def calculate_offsets(self, blocks, chunk_size):
         """
@@ -138,7 +137,7 @@ class Classification():
         return offsets
 
     def load_zarr(self, path):
-        data = da.from_zarr(path)
+        data = da.from_zarr(path, storage_options={"anon": True})
         return data[0, 0, :, :, :]
 
     def get_dims(self):
@@ -219,7 +218,7 @@ class Classification():
     def run_model(self, cells, padding, signal, background, smartspim_config, offset, block = 0):
 
 
-        gen = customImageDataGenerator(percentile_normalization = True, percentile_range=(1,99))
+        gen = customImageDataGenerator(percentile_normalization=self.percentile_normalization, percentile_range=self.percentile_range)
 
 
         cell_list = []
@@ -298,8 +297,8 @@ class Classification():
 
     def run(self):
 
-        signal_path = os.path.join(self.signal_path, self.input_scale)  
-        bkg_path = os.path.join(self.background_path, self.input_scale) 
+        signal_path = f"{self.signal_path}/{self.input_scale}"
+        bkg_path = f"{self.background_path}/{self.input_scale}"
 
         logger.info(f"Signal path: {signal_path}")
         logger.info(f"Background path: {bkg_path}")

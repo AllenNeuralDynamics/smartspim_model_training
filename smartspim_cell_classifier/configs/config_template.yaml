@@ -12,7 +12,7 @@
 build_model: true
 build_training_set: false
 train_model: true
-classify: false
+benchmark: false
 quantify: false
 
 # Run classification on full volume (true) or a subregion (false)
@@ -25,6 +25,11 @@ save_path: null  # REQUIRED e.g. /results
 
 # Path to a pre-trained model to continue training from
 trained_model_path: null  # REQUIRED e.g. /data/models/model.keras
+
+# Path to the benchmark config yml that drives classify() —
+# specifies zarr locations, channels, and regions per condition
+# REQUIRED if classify: true
+benchmark_config_path: null  # e.g. benchmark_configs/benchmark_configs.yml
 
 # Root directory that contains per-dataset training set folders
 # Accepts a local path or an s3:// URI
