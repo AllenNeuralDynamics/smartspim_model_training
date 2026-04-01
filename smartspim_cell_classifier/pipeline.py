@@ -4,11 +4,15 @@ import yaml
 import logging
 import s3fs
 
+import numpy as np
+import pandas as pd
+from sklearn.neighbors import KDTree
+
 from glob import glob
 from pathlib import Path
 from imlib.IO.cells import get_cells
 
-from .utils import utils, benchmark_keras, quantify
+from .utils import utils, benchmark_keras, quantify, plots
 from .train import train_keras
 
 logger = logging.getLogger(__name__)
@@ -191,6 +195,62 @@ class SmartSPIMPipeline:
             benchmark_keras.Classification(class_params).run()
             logger.info(f"Classification took {time.time() - start:.1f}s for condition: {cond}")
 
+        self._plot_pr_curves(data, p)
+
+    def _plot_pr_curves(self, benchmark_data: dict, p: dict) -> None:
+        """Match saved probability CSVs against ground truth annotations and plot PR curves."""
+        ann_path = p.get("benchmark_params", {}).get("benchmark_json_path")
+        layer_name = p.get("benchmark_params", {}).get("layer_name", "cells")
+        if not ann_path:
+            logger.warning("benchmark_params.benchmark_json_path not set; skipping PR curve.")
+            return
+
+        # Compute region dims from the benchmark config (same logic as quantify.get_volume_dimensions)
+        dim_dict = {
+            cond: [
+                cd["region"][3] - cd["region"][0],
+                cd["region"][4] - cd["region"][1],
+                cd["region"][5] - cd["region"][2],
+            ]
+            for cond, cd in benchmark_data["data"].items()
+        }
+
+        # Load ground truth annotations keyed by condition
+        annotations = {}
+        for ap in glob(os.path.join(ann_path, "*.json")):
+            info = os.path.basename(ap)[:-5].split("_")
+            cond = "_".join(info[1:3])
+            json_data = utils.load_json(ap)
+            annotations[cond] = utils.parse_annotation_dict(json_data, layer_name, dim_dict[cond])
+
+        pr_data = {}
+        for cond in benchmark_data["data"]:
+            prob_csv = os.path.join(p["save_path"], "classifications", f"{cond}_probabilities.csv")
+            if not os.path.exists(prob_csv):
+                logger.warning(f"No probability CSV found for {cond}, skipping.")
+                continue
+            if cond not in annotations:
+                logger.warning(f"No annotations found for {cond}, skipping.")
+                continue
+
+            prob_df = pd.read_csv(prob_csv)
+            det_locs = prob_df[["z", "y", "x"]].values
+            y_score = prob_df["prob"].values
+
+            ann_locs = np.array(annotations[cond])
+            if len(ann_locs) == 0 or len(det_locs) == 0:
+                logger.warning(f"Empty annotations or detections for {cond}, skipping.")
+                continue
+
+            # For each detection, y_true=1 if within radius 7 of any annotation
+            tree = KDTree(ann_locs, leaf_size=2)
+            matches = tree.query_radius(det_locs, r=7)
+            y_true = np.array([1 if len(m) > 0 else 0 for m in matches])
+            pr_data[cond] = (y_true, y_score)
+
+        if pr_data:
+            plots.precision_recall_curve_plot(pr_data, p["save_path"])
+
     def quantify(self):
         """Compute precision/recall metrics against benchmark annotations."""
         quantify.run(self.params["benchmark_params"])
@@ -303,7 +363,7 @@ class SmartSPIMPipeline:
             "balance": False,
             "benchmark_params": {
                 "classified_xml_path": "../results/classifications/",
-                "benchmark_json_path": "../data/benchmark_json/",
+                "benchmark_json_path": "../data/benchmark_jsons/",
                 "layer_name": "cells",
             },
         }

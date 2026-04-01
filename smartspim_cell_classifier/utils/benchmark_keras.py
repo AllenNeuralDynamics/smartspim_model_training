@@ -11,6 +11,7 @@ import random
 import keras
 import dask.array as da
 import numpy as np
+import pandas as pd
 
 from glob import glob
 from pathlib import Path
@@ -251,8 +252,9 @@ class Classification():
         )
 
         logger.debug(f"Raw predictions shape: {predictions.shape}")
-        predictions[:, 1] -=0.05
-        predictions[:, 0] +=0.05
+
+        # Save raw probabilities (pre-threshold) for PR curve generation
+        raw_probs = predictions[:, 1]
 
         predictions = predictions.round()
         predictions = predictions.astype("uint16")
@@ -279,16 +281,21 @@ class Classification():
 
 
         cells_out = []
-        for cell in classified_cells:
+        prob_records = []
+        for idx, cell in enumerate(classified_cells):
             x = (cell.x + offset[0] - padding) * 2
             y = (cell.y + offset[1] - padding) * 2
             z = (cell.z + offset[2] - padding) * 2
             cell.x = x
             cell.y = y
             cell.z = z
-            
             cells_out.append(cell)
+            prob_records.append([z, y, x, raw_probs[idx]])
 
+        pd.DataFrame(prob_records, columns=["z", "y", "x", "prob"]).to_csv(
+            os.path.join(self.save_path, "classifications", f"{self.cond}_probabilities.csv"),
+            index=False,
+        )
 
         save_cells(
             cells=cells_out, 
