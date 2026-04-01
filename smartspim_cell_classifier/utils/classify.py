@@ -11,6 +11,7 @@ from imlib.IO.cells import save_cells
 from imlib.cells.cells import Cell
 
 from ..DataLoader.customDataloader import customImageDataGenerator
+from ..model.resnet import GroupNormalization3D
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,10 @@ class Classification():
             shuffle=False,
         )
 
-        model = keras.models.load_model(self.model_path)
+        model = keras.models.load_model(
+            self.model_path,
+            custom_objects={"GroupNormalization3D": GroupNormalization3D},
+        )
         predictions = model.predict(
             inference_gen,
             steps=len(cell_list) // self.batch_size + 1,
