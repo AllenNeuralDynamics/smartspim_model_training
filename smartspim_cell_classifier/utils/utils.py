@@ -4,6 +4,7 @@ import yaml
 import logging
 from typing import List, Literal, Tuple, Union, overload
 import boto3
+import s3fs
 import tifffile
 import numpy as np
 import dask.array as da
@@ -60,11 +61,19 @@ class TiffDir(TiffList):
 
     def __init__(self, tiff_dir: str, channels: list, label=None):
         ch0_suffix = "ch" + str(channels[0]) + ".tif"
-        ch1_list = [
-            os.path.join(tiff_dir, f)
-            for f in os.listdir(tiff_dir)
-            if f.lower().endswith(ch0_suffix)
-        ]
+        if tiff_dir.startswith("s3://"):
+            fs = s3fs.S3FileSystem(anon=False)
+            ch1_list = [
+                "s3://" + f
+                for f in fs.ls(tiff_dir, detail=False)
+                if f.lower().endswith(ch0_suffix)
+            ]
+        else:
+            ch1_list = [
+                os.path.join(tiff_dir, f)
+                for f in os.listdir(tiff_dir)
+                if f.lower().endswith(ch0_suffix)
+            ]
         super().__init__(ch1_list, channels, label)
 
 
@@ -75,7 +84,7 @@ def read_yaml_section(yaml_file, section: str = "data"):
     Parameters
     ----------
     yaml_file : str or Path
-        Path to the YAML file.
+        Path to the YAML file, or an s3:// URI.
     section : str
         Top-level key to return.
 
@@ -83,8 +92,14 @@ def read_yaml_section(yaml_file, section: str = "data"):
     -------
     The contents of the requested section.
     """
-    with open(yaml_file) as f:
-        contents = yaml.safe_load(f)
+    yaml_file = str(yaml_file)
+    if yaml_file.startswith("s3://"):
+        fs = s3fs.S3FileSystem(anon=False)
+        with fs.open(yaml_file) as f:
+            contents = yaml.safe_load(f)
+    else:
+        with open(yaml_file) as f:
+            contents = yaml.safe_load(f)
     return contents[section]
 
 

@@ -12,6 +12,7 @@ new preprocessing methods, etc...
 
 from functools import partial
 from multiprocessing import Pool
+from multiprocessing.pool import ThreadPool
 import numpy as np
 import os
 import re
@@ -23,6 +24,7 @@ import threading
 import warnings
 import keras
 import tifffile
+import s3fs
 
 import warnings
 from pyopencl import CompilerWarning
@@ -47,9 +49,18 @@ except ImportError:
 from scipy.ndimage.interpolation import map_coordinates
 from scipy.ndimage.filters import gaussian_filter
 
+def _imread_tiff(path):
+    """Read a tiff from a local path or an s3:// URI."""
+    if isinstance(path, str) and path.startswith("s3://"):
+        fs = s3fs.S3FileSystem(anon=False)
+        with fs.open(path, "rb") as f:
+            return tifffile.imread(f)
+    return imread(path)
+
+
 def load_images(signal_path, background_path):
-    signal_loaded = np.moveaxis(imread(signal_path), 0, 2)
-    background_loaded = np.moveaxis(imread(background_path), 0, 2)
+    signal_loaded = np.moveaxis(_imread_tiff(signal_path), 0, 2)
+    background_loaded = np.moveaxis(_imread_tiff(background_path), 0, 2)
     return [signal_loaded, background_loaded]
 
 def random_rotation(x, rg, row_axis=1, col_axis=2, channel_axis=0,
@@ -975,7 +986,7 @@ class customImageDataGenerator(object):
                 
         return x
 
-    def fit(self, signal, background, shape = None, pcas = None, inference = False ):
+    def fit(self, signal, background, shape = None, pcas = None, inference = False, max_samples = None):
 
         x_total = []
         y_total = []
@@ -984,7 +995,13 @@ class customImageDataGenerator(object):
             self.mean = [np.mean(signal), np.mean(background)]
             self.std = [np.std(signal), np.std(background)]
         else:
-            with Pool(16) as p:
+            if max_samples is not None and len(signal) > max_samples:
+                indices = np.random.choice(len(signal), max_samples, replace=False)
+                signal = [signal[i] for i in indices]
+                background = [background[i] for i in indices]
+                print(f"Sampling {max_samples} of {len(signal)} files for featurewise statistics")
+
+            with ThreadPool(16) as p:
                 for totals in p.starmap(load_images, zip(signal, background)):
                     x_total.extend(totals[0])
                     y_total.extend(totals[1])
@@ -1122,13 +1139,13 @@ class FileIterator(Iterator):
         # Loop through z-axis
         #for s in range(self.slices_per_volume):
         for i,j in enumerate(index_array):
-            x = np.moveaxis(imread(self.signal[j]), 0, 2).astype(K.floatx())
+            x = np.moveaxis(_imread_tiff(self.signal[j]), 0, 2).astype(K.floatx())
 
             x = self.image_data_generator.random_transform(x, seed=(j+1)*seed_random, channel = 0, label = self.labels[j], count = i)
             x = self.image_data_generator.standardize(x, channel = 0)
             batch_images[i,:,:,:, 0] = x
 
-            y = np.moveaxis(imread(self.background[j]), 0, 2).astype(K.floatx())
+            y = np.moveaxis(_imread_tiff(self.background[j]), 0, 2).astype(K.floatx())
             y = self.image_data_generator.random_transform(y, seed=(j+1)*seed_random, channel = 1, label = self.labels[j], count = i)
             y = self.image_data_generator.standardize(y, channel = 1)
             batch_images[i,:,:,:, 1] = y

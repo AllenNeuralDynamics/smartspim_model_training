@@ -1,4 +1,3 @@
-import os
 import logging
 import numpy as np
 import random
@@ -9,9 +8,8 @@ from skimage.io import imread
 from sklearn.model_selection import train_test_split
 
 from ..utils.utils import (
-    TiffDir, 
-    TiffList, 
-    read_yaml_section, 
+    TiffDir,
+    read_yaml_section,
     make_lists
 )
 from ..utils.volume_augment import customImageDataGenerator
@@ -55,15 +53,7 @@ def get_tiff_files(yaml_contents):
             channels = [d["signal_channel"]]
         else:
             channels = [d["signal_channel"], d["bg_channel"]]
-        if "cell_def" in d and d["cell_def"]:
-            ch1_tiffs = [
-                os.path.join(d["cube_dir"], f)
-                for f in os.listdir(d["cube_dir"])
-                if f.lower().endswith("ch" + str(channels[0]) + ".tif")
-            ]
-            tiff_lists.append(TiffList(ch1_tiffs, channels, d["type"]))
-        else:
-            tiff_lists.append(TiffDir(d["cube_dir"], channels, d["type"]))
+        tiff_lists.append(TiffDir(d["cube_dir"], channels, d["type"]))
 
     tiff_files = [tiff_dir.make_tifffile_list() for tiff_dir in tiff_lists]
     return tiff_files
@@ -229,8 +219,9 @@ def build_data_generators(yaml_files, augment_params, model_params):
 
     if augment_params['featurewise_center'] or augment_params['featurewise_std_normalization']:
         logger.info("Fitting featurewise statistics on training data")
-        gen_train.fit(signal_train, background_train, shape=cube_shape, inference=False)
-        gen_val.fit(signal_train, background_train, shape=cube_shape, inference=False)
+        max_samples = augment_params.get('featurewise_max_samples', None)
+        gen_train.fit(signal_train, background_train, shape=cube_shape, inference=False, max_samples=max_samples)
+        gen_val.fit(signal_train, background_train, shape=cube_shape, inference=False, max_samples=max_samples)
 
     training_gen = _flow(
         signal=signal_train,
@@ -256,66 +247,6 @@ def build_data_generators(yaml_files, augment_params, model_params):
 
     return training_gen, validation_gen, len(signal_train), len(signal_test)
 
-
-def _download_s3_cube_dir(s3_uri: str, local_cache_dir: str) -> str:
-    """
-    Download a cube directory from S3 to a local cache and return the local path.
-
-    Parameters
-    ----------
-    s3_uri : str
-        S3 URI of the cube directory, e.g. ``s3://my-bucket/training/cells``.
-    local_cache_dir : str
-        Root directory to download into. The S3 key structure is preserved
-        beneath this path so repeated calls with the same URI are idempotent.
-
-    Returns
-    -------
-    str
-        Absolute local path to the downloaded directory.
-    """
-    import s3fs
-
-    s3_path = s3_uri.removeprefix("s3://")
-    local_path = os.path.join(local_cache_dir, s3_path)
-
-    if not os.path.exists(local_path):
-        logger.info(f"Downloading s3://{s3_path} → {local_path}")
-        fs = s3fs.S3FileSystem(anon=False)
-        fs.get(s3_path, local_path, recursive=True)
-    else:
-        logger.info(f"Using cached {local_path}")
-
-    return local_path
-
-
-def get_tiff_files_s3(yaml_contents: list, local_cache_dir: str) -> list:
-    """
-    Like ``get_tiff_files`` but ``cube_dir`` entries are S3 URIs.
-
-    Each S3 cube directory is downloaded to ``local_cache_dir`` before being
-    passed to ``get_tiff_files``, so the rest of the pipeline is unaffected.
-
-    Parameters
-    ----------
-    yaml_contents : list[dict]
-        Parsed yaml entries where ``cube_dir`` is an S3 URI
-        (e.g. ``s3://bucket/path/cells``).
-    local_cache_dir : str
-        Local directory to cache downloaded cube directories.
-
-    Returns
-    -------
-    list
-        Same format as ``get_tiff_files``.
-    """
-    local_yaml_contents = []
-    for d in yaml_contents:
-        d_local = dict(d)
-        d_local["cube_dir"] = _download_s3_cube_dir(d["cube_dir"], local_cache_dir)
-        local_yaml_contents.append(d_local)
-
-    return get_tiff_files(local_yaml_contents)
 
 
 def train(model, training_gen, validation_gen, model_params, epoch_size, n_val):

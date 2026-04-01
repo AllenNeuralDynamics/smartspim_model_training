@@ -2,6 +2,7 @@ import os
 import time
 import yaml
 import logging
+import s3fs
 
 from glob import glob
 from pathlib import Path
@@ -47,9 +48,15 @@ def _check_required(params: dict) -> None:
 
 def _compile_ymls(yml_path, training_sets):
     yml_files = []
-    for training_set in training_sets:
-        files = glob(os.path.join(yml_path, training_set, "ymls", "*.yml"))
-        yml_files.extend(Path(f) for f in files)
+    if str(yml_path).startswith("s3://"):
+        fs = s3fs.S3FileSystem(anon=False)
+        for training_set in training_sets:
+            pattern = f"{str(yml_path).rstrip('/')}/{training_set}/ymls/*.yml"
+            yml_files.extend("s3://" + f for f in fs.glob(pattern))
+    else:
+        for training_set in training_sets:
+            files = glob(os.path.join(yml_path, training_set, "ymls", "*.yml"))
+            yml_files.extend(Path(f) for f in files)
     return yml_files
 
 
