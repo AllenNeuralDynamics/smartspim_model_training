@@ -36,5 +36,5 @@ classification_params:
 
 # ---- Quantification (used if quantify: true) ---------------
 benchmark_params:
-  benchmark_json_path: null  # REQUIRED  e.g. /data/benchmark_jsons/
+  benchmark_json_path: null  # REQUIRED  e.g. smartspim_cell_classifier/benchmark_jsons/ (relative to repo root)
   layer_name: cells

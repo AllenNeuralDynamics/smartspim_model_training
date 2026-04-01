@@ -75,7 +75,7 @@ class Classification():
             shuffle=False,
         )
 
-        model = keras.saving.load_model(self.model_path)
+        model = keras.models.load_model(self.model_path)
         predictions = model.predict(
             inference_gen,
             steps=len(cell_list) // self.batch_size + 1,

@@ -15,7 +15,10 @@ dependencies = [
     "numpy",
     "dask[distributed]==2024.8.0",
     "zarr==2.13.6",
-    "boto3",
+    "s3fs",
+    "aiobotocore==3.3.0",
+    "botocore>=1.42.62,<1.42.71",
+    "boto3<1.42.71",
     # Scientific computing
     "scikit-learn",
     "pandas",
