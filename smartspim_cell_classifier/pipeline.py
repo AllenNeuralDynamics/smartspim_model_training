@@ -134,6 +134,7 @@ class SmartSPIMPipeline:
             p["monitor"],
         )
         data_params["balance"] = p["balance"]
+        data_params["override_cube_dir"] = p.get("override_cube_dir", False)
 
         logger.info(f"Augmentation parameters: {p['augment_params']}")
         train_keras.run(data_params, p["augment_params"], self.model)
@@ -214,6 +215,24 @@ class SmartSPIMPipeline:
     # ------------------------------------------------------------------
     # Default configuration
     # ------------------------------------------------------------------
+
+    @classmethod
+    def from_config(cls, config_path: str) -> "SmartSPIMPipeline":
+        """Instantiate the pipeline from a YAML config file.
+
+        Parameters
+        ----------
+        config_path : str or Path
+            Path to a YAML file whose keys match the schema in
+            ``default_params()``.
+
+        Returns
+        -------
+        SmartSPIMPipeline
+        """
+        with open(config_path) as f:
+            params = yaml.safe_load(f)
+        return cls(params)
 
     @staticmethod
     def default_params() -> dict:

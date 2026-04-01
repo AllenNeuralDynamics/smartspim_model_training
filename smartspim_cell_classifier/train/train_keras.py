@@ -59,6 +59,16 @@ def get_tiff_files(yaml_contents):
     return tiff_files
 
 
+def _derive_cube_dir_root(yml_file):
+    """Return the training-set root directory from a yml file path.
+
+    Works for both local paths and s3:// URIs. The yml is always at
+    <root>/ymls/<name>.yml so the root is two levels up.
+    """
+    parts = str(yml_file).replace("\\", "/").rstrip("/").split("/")
+    return "/".join(parts[:-2])
+
+
 def balance_dataset(signal, background, labels):
 
     tp_count = sum(labels)
@@ -140,7 +150,7 @@ def _flow(signal, background, labels, shape, gen, batch_size, predict, shuffle):
         yield (b[0], b[1])
 
 
-def build_data_generators(yaml_files, augment_params, model_params):
+def build_data_generators(yaml_files, augment_params, model_params, override_cube_dir=False):
     """
     Load the dataset from yaml files and return train/validation generators.
 
@@ -155,6 +165,10 @@ def build_data_generators(yaml_files, augment_params, model_params):
         Keyword arguments forwarded to ``customImageDataGenerator``.
     model_params : dict
         Must contain ``balance``, ``test_fraction``, and ``batch_size``.
+    override_cube_dir : bool
+        When True, ignore the ``cube_dir`` stored in each yml and rebuild it
+        from the yml file's location (``yml_path/training_set``), keeping the
+        last 3 path components of the original value (``lt_id/channel/type``).
 
     Returns
     -------
@@ -168,7 +182,15 @@ def build_data_generators(yaml_files, augment_params, model_params):
         Number of validation samples — use for ``validation_steps``.
     """
     logger.info(f"Parsing {len(yaml_files)} yaml file(s)")
-    yaml_contents = parse_yaml(yaml_files)
+    yaml_contents = []
+    for yaml_file in yaml_files:
+        entries = read_yaml_section(yaml_file)
+        if override_cube_dir:
+            root = _derive_cube_dir_root(yaml_file)
+            for entry in entries:
+                trailing = "/".join(str(entry["cube_dir"]).replace("\\", "/").rstrip("/").split("/")[-3:])
+                entry["cube_dir"] = f"{root}/{trailing}"
+        yaml_contents.extend(entries)
     tiff_files = get_tiff_files(yaml_contents)
 
     signal_train, background_train, labels_train = make_lists(tiff_files)
@@ -387,6 +409,7 @@ def train(model, training_gen, validation_gen, model_params, epoch_size, n_val):
 def run(model_params, augment_params, model):
     """Convenience wrapper: build generators then train."""
     training_gen, validation_gen, epoch_size, n_val = build_data_generators(
-        model_params['yaml_file'], augment_params, model_params
+        model_params['yaml_file'], augment_params, model_params,
+        override_cube_dir=model_params.get('override_cube_dir', False),
     )
     return train(model, training_gen, validation_gen, model_params, epoch_size, n_val)

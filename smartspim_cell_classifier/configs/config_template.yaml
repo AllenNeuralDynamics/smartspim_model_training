@@ -1,0 +1,100 @@
+# ============================================================
+# SmartSPIM Cell Classifier — Pipeline Configuration
+#
+# Copy this file, fill in the REQUIRED fields (marked below),
+# then run:
+#   from smartspim_cell_classifier.pipeline import SmartSPIMPipeline
+#   pipeline = SmartSPIMPipeline.from_config("your_config.yaml")
+#   pipeline.run()
+# ============================================================
+
+# ---- Pipeline stages to run (set to true/false) ------------
+build_model: true
+build_training_set: false
+train_model: true
+classify: false
+quantify: false
+
+# Run classification on full volume (true) or a subregion (false)
+Test: false
+
+# ---- Required paths ----------------------------------------
+
+# Where to write all outputs (models, logs, plots)
+save_path: null  # REQUIRED e.g. /results
+
+# Path to a pre-trained model to continue training from
+trained_model_path: null  # REQUIRED e.g. /data/models/model.keras
+
+# Root directory that contains per-dataset training set folders
+# Accepts a local path or an s3:// URI
+yml_path: null  # REQUIRED e.g. /data  or  s3://my-bucket/data
+
+# Names of training set subdirectories under yml_path to include
+training_sets:
+  - null  # REQUIRED e.g. 2026_01_09_outsource_training_set
+
+# When true, ignore the cube_dir stored in each yml file and rebuild it
+# automatically from yml_path/training_set. Set to true when yml files
+# were generated with local paths but training data lives on S3.
+override_cube_dir: false
+
+# ---- Training set construction (used if build_training_set: true) ----
+annotation_params:
+  level: 1
+  annotation_path: null  # REQUIRED e.g. /data/annotations
+  cells_layer: FNs
+  noncells_layer: FPs
+  resolution: [2.0, 1.8, 1.8]  # um/px at level 0 [z, y, x]
+  crop_size: [52, 25, 25]       # crop size in microns [z, y, x]
+
+# ---- Model architecture ------------------------------------
+model_params:
+  shape: [14, 14, 26, 2]   # input cube shape [x, y, z, channels]
+  network_depth: "18-layer" # one of: 18-layer, 34-layer, 50-layer, 101-layer, 152-layer
+  learning_rate: 0.0003
+  optimizer: adam
+  number_classes: 2
+  axis: -1
+  starting_features: 64
+
+# ---- Training augmentation ---------------------------------
+augment_params:
+  featurewise_center: false
+  samplewise_center: false
+  featurewise_std_normalization: false
+  samplewise_std_normalization: false
+  percentile_normalization: true
+  percentile_range: [1, 99]
+  zca_whitening: false
+  zca_epsilon: 1.0e-7
+  rotation_range: 15
+  width_shift_range: 0.05
+  height_shift_range: 0.05
+  brightness_range: [0.6, 1.5]
+  background_range: null
+  elastic_deform: [5, 2]
+  shear_range: 5
+  zoom_range: 0.15
+  channel_shift_range: 0
+  fill_mode: reflect
+  cval: 0
+  horizontal_flip: true
+  vertical_flip: true
+  rescale: null
+  preprocessing_function: null
+  expand_dims: true
+  data_format: channels_last
+  random_mult_range: [0.7, 1.2]
+  striping: false
+
+# ---- Training schedule -------------------------------------
+schedule: Cosine   # Cosine or ReduceLR
+monitor: val_recall_at_p90
+balance: false
+
+# ---- Benchmarking (used if quantify: true) -----------------
+benchmark_params:
+  classified_xml_path: null  # REQUIRED e.g. /results/classifications/
+  benchmark_json_path: null  # REQUIRED e.g. /data/benchmark_json/
+  layer_name: cells
