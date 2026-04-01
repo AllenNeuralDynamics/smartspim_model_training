@@ -1,8 +1,10 @@
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
-from keras import (
-    KerasTensor as Tensor,
-)
+try:
+    from keras import KerasTensor as Tensor
+except ImportError:
+    from keras.src.backend.common.keras_tensor import KerasTensor as Tensor
+
 from keras import Model
 import keras.ops as ops
 from keras.initializers import Initializer
