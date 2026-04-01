@@ -11,7 +11,13 @@ from imlib.IO.cells import save_cells
 from imlib.cells.cells import Cell
 
 from ..DataLoader.customDataloader import customImageDataGenerator
-from ..model.resnet import GroupNormalization3D
+from ..model.resnet import (
+    GroupNormalization3D,
+    ReduceMean3D,
+    ReduceMax3D,
+    BinaryFocalLoss,
+    CategoricalFocalLoss,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +84,13 @@ class Classification():
 
         model = keras.models.load_model(
             self.model_path,
-            custom_objects={"GroupNormalization3D": GroupNormalization3D},
+            custom_objects={
+                "GroupNormalization3D": GroupNormalization3D,
+                "ReduceMean3D": ReduceMean3D,
+                "ReduceMax3D": ReduceMax3D,
+                "BinaryFocalLoss": BinaryFocalLoss,
+                "CategoricalFocalLoss": CategoricalFocalLoss,
+            },
         )
         predictions = model.predict(
             inference_gen,
